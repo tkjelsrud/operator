@@ -1,0 +1,25 @@
+<proxyconfig>
+  <var key="port" value="8080" />
+
+  <routing match="/xxxx"
+     host="xxxx.no"
+     path="/xxxx" />
+
+  <routing match="/asd"
+     host="xxxx.no"
+     path="/xxxx" />
+
+  <routing match="/erf"
+     host="xxxx.no"
+     path="/xxxx" />
+
+  <exec>
+    <notify  event="request.header" key="SOAPAction" match="" />
+    <notify  event="response.header" key="Content-Length" match="" />
+
+    <delay   event="request" time="5.000" />
+    <replace event="data" key="data" match="0001" replace="0002" />
+
+    <delay   event="request.connection" time="5.000" />
+  </exec>
+</proxyconfig>

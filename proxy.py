@@ -3,24 +3,35 @@ import SocketServer
 import sys
 import httplib, urllib
 from xml.dom import minidom
+from time import sleep
 
 CFG = "proxy-config.xml"
 
 class Config:
     def __init__(self):
-        self.data = {'matchers': []}
+        self.data = {'exec': [], 'routing': []}
         xd = minidom.parse(CFG)
         vList = xd.getElementsByTagName('var')
         for v in vList:
             self.data[v.attributes['key'].value] = v.attributes['value'].value
-        nList = xd.getElementsByTagName('match')
-        for n in nList:
-            ma = {'type': n.attributes['type'].value,
-                  'key': n.attributes['key'].value,
-                  'match': n.attributes['match'].value}
-            if n.hasAttribute('replace'):
-                ma['replace'] = n.attributes['replace'].value
-            self.data['matchers'].append(ma)
+        eList = xd.getElementsByTagName('exec')
+        for n in eList[0].childNodes:
+            if n.nodeType == n.ELEMENT_NODE:
+                ma = {'type': n.nodeName, 'event': n.attributes['event'].value}
+                if ma['type'] == "notify" or ma['type'] == "replace":
+                    ma['key'] = n.attributes['key'].value
+                    ma['match'] = n.attributes['match'].value
+                if ma['type'] == "replace":
+                    ma['replace'] = n.attributes['replace'].value
+                if ma['type'] == "delay":
+                    ma['time'] = n.attributes['time'].value
+                self.data['exec'].append(ma)
+        eList = xd.getElementsByTagName('routing')
+        for e in eList:
+            ep = {'match': e.attributes['match'].value,
+                  'host': e.attributes['host'].value,
+                  'path': e.attributes['path'].value}
+            self.data['routing'].append(ep)
         print(str(self.data))
 
     def get(self, key):
@@ -28,14 +39,32 @@ class Config:
             return self.data[key]
         return None
 
-    def runMatchers(self, type, key, value):
-        for m in self.data['matchers']:
-            if type.lower() == m['type'].lower() and key.lower() == m['key'].lower():
-                if 'replace' in m:
-                    print('Want to replace something in ' + key)
-                else:
-                    print(key + ': ' + value)
+    def runEvents(self, event, key = None, value = None):
+        for m in self.data['exec']:
+            if event.lower() == m['event'].lower():
+                None
+                if not key or (key and key.lower() == m['key'].lower()):
+                    value = self.run(m, event, key, value)
+
         return value
+
+    def run(self, ex, event, key=None, value=None):
+        if ex['type'].lower() == "delay":
+            print("\t[" + event + "] DELAY " + ex['time'] + "s")
+            sleep(float(ex['time']))
+        if ex['type'].lower() == "notify":
+            print("\t[" + event + "] " + str(key) + ": " + str(value))
+        if ex['type'].lower() == "replace":
+            if ex['match'] in value:
+                print("\t[" + event + "] REPLACE " + ex['match'] + " -> " + ex['replace'])
+                value = value.replace(ex['match'], ex['replace'])
+        return value
+
+    def getEndpoint(self, context):
+        for r in self.data['routing']:
+            if r['match'] in context:
+                return [r['host'], r['path']]
+        return None
 
 CONFIG = Config()
 
@@ -50,8 +79,7 @@ class Handler(SimpleHTTPRequestHandler):
         print("<- POST (" + str(response.status) + ") h:" + str(len(response.getheaders())) + " d:" + str(len(data)))
         self.send_response(response.status)
         for p in response.getheaders():
-            print(str(p[0]) + ": " + str(p[1]))
-            val = CONFIG.runMatchers('response.header', p[0], p[1])
+            val = CONFIG.runEvents('response.header', p[0], p[1])
             if p[0].lower() == 'transfer-encoding':
                 self.send_header("Content-Length", str(len(data)))
             else:
@@ -63,10 +91,10 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         try:
             print("-> POST " + self.requestline + " h:" + str(len(self.headers)) + " d:")
+            CONFIG.runEvents('request')
             hList = {}
             for key in self.headers:
-                print(key + ": " + self.headers[key])
-                val = CONFIG.runMatchers('request.header', key, self.headers[key])
+                val = CONFIG.runEvents('request.header', key, self.headers[key])
                 hList[key] = val
 
             rSize = 0
@@ -79,11 +107,18 @@ class Handler(SimpleHTTPRequestHandler):
                 data = self.readChunked(self.rfile)
                 hList["Content-Length"] = str(len(data))
 
+            data = CONFIG.runEvents('data', 'data', data)
+
             self.toFile('proxy.req', data)
-            res = self.postExt(hList, data)
 
-            self.respond(res)
+            # Pick host/path
+            endpoint = CONFIG.getEndpoint(self.requestline)
+            if endpoint:
+                res = self.postExt(endpoint, hList, data)
 
+                self.respond(res)
+            else:
+                print("ENDPOINT not configured for: " + self.requestline)
         except:
             print("Unexpected error:" + str(sys.exc_info()[0]))
             self.send_response(500)
@@ -115,15 +150,16 @@ class Handler(SimpleHTTPRequestHandler):
         return data
 
 
-    def postExt(self, headers, data):
+    def postExt(self, endpoint, headers, data):
         try:
-            conn = httplib.HTTPSConnection(CONFIG.get('exthost'))
+            conn = httplib.HTTPSConnection(endpoint[0])
             if 'transfer-encoding' in headers:
                 headers.pop("transfer-encoding", None)
-            conn.request("POST", CONFIG.get('extpath'), data, headers)
+            conn.request("POST", endpoint[1], data, headers)
+            CONFIG.runEvents("request.connection")
             response = conn.getresponse()
             data = response.read()
-            print("POST <- %s : %s" % (response.status, response.reason))
+            #print("POST <- %s : %s" % (response.status, response.reason))
             conn.close()
             return (response, data)
         except:
@@ -131,6 +167,7 @@ class Handler(SimpleHTTPRequestHandler):
             raise
 
     def toFile(self, fname, data):
+        #print("WF: " + fname)
         f = open(fname, 'r+')
         text = f.read()
         f.seek(0)
