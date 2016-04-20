@@ -20,6 +20,7 @@
     <delay   event="request" time="5.000" />
     <replace event="data" key="data" match="0001" replace="0002" />
 
-    <delay   event="request.connection" time="5.000" />
+    <!-- 50% chance of a 5 second delay when connecting -->
+    <delay   event="request.connection" time="5.000" chance="0.5" />
   </exec>
 </proxyconfig>
