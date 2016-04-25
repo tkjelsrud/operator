@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # thomas.kjelsrud@vegvesen.no
-# 
+#
 # versjonering
 #
 # unit tester
@@ -37,6 +37,8 @@ class Config:
                     ma['match'] = n.attributes['match'].value
                 if n.hasAttribute("chance"):
                     ma['chance'] = float(n.attributes['chance'].value)
+                if n.hasAttribute("action"):
+                    ma['act'] = n.attributes['action'].value
                 self.data['exec'].append(ma)
         if len(self.data['exec']) > 0:
             print("ADD EVENTS: " + str(len(self.data['exec'])))
@@ -58,12 +60,12 @@ class Config:
             return self.data[key]
         return None
 
-    def runEvents(self, event, key = None, value = None):
+    def runEvents(self, event, act = None, key = None, value = None):
         for m in self.data['exec']:
             if event.lower() == m['event'].lower():
-                #print(str(key))
-                if not key or not 'key' in m or (key and key.lower() == m['key'].lower()):
-                    value = self.run(m, event, key, value)
+                if not act or not 'act' in m or (act and m['act'].lower() in act.lower()):
+                    if not key or not 'key' in m or (key != None and key.lower() == m['key'].lower()):
+                        value = self.run(m, event, key, value)
 
         return value
 
@@ -76,10 +78,10 @@ class Config:
             if ex['match'] not in value:
                 return value
         if ex['type'].lower() == "fail":
-            print("\t[" + event + "] Failing " + str(key) + ": " + str(value)) 
+            print("\t[" + event + "] Failing " + str(key) + ": " + str(value))
             raise Exception("Fail!1")
         if ex['type'].lower() == "delay":
-            print("\t[" + event + "] DELAY " + ex['time'] + "s " +  + str(key) + ": " + str(value))
+            print("\t[" + event + "] DELAY " + ex['time'] + "s " + str(key) + ": " + str(value))
             sleep(float(ex['time']))
         if ex['type'].lower() == "notify":
             print("\t[" + event + "] " + str(key) + ": " + str(value))
@@ -104,10 +106,11 @@ class Config:
                     if '$' + str(i) in path:
                          #print("MATCH" + str(i) + " : " + m.group(i))
                          path = path.replace('$' + str(i), m.group(i))
-                         #print("NEWP:" + path)
-                #if len(context) > 1:
-                #    path = path + '?' + context[1]
-                return [r['host'], path, r['secure']]
+                secure = False
+                if 'secure' in r:
+                    secure = r['secure']
+                
+                return [r['host'], path, secure]
         return None
 
 
@@ -122,7 +125,7 @@ class Handler(SimpleHTTPRequestHandler):
         print("<- POST (" + str(response.status) + ") h:" + str(len(response.getheaders())) + " d:" + str(len(data)))
         self.send_response(response.status)
         for p in response.getheaders():
-            val = CONFIG.runEvents('response.header', p[0], p[1])
+            val = CONFIG.runEvents('response.header', None,  p[0], p[1])
             if p[0].lower() == 'transfer-encoding':
                 self.send_header("Content-Length", str(len(data)))
             else:
@@ -134,11 +137,14 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            act = ""
+            if "soapaction" in self.headers:
+                act = self.headers["soapaction"]
             print("-> POST " + self.requestline + " h:" + str(len(self.headers)))
-            CONFIG.runEvents('request')
+            CONFIG.runEvents('request', act)
             hList = {}
             for key in self.headers:
-                val = CONFIG.runEvents('request.header', key, self.headers[key])
+                val = CONFIG.runEvents('request.header', act, key, self.headers[key])
                 hList[key] = val
 
             rSize = 0
@@ -151,7 +157,7 @@ class Handler(SimpleHTTPRequestHandler):
                 data = self.readChunked(self.rfile)
                 hList["Content-Length"] = str(len(data))
 
-            data = CONFIG.runEvents('data', 'data', data)
+            data = CONFIG.runEvents('data', act, 'data', data)
 
             self.toFile('proxy_200.req', data)
 
@@ -229,8 +235,7 @@ class Handler(SimpleHTTPRequestHandler):
             raise
 
     def toFile(self, fname, data):
-        #print("WF: " + fname)
-        f = open(fname, 'r+')
+        f = open(fname, 'rw+')
         text = f.read()
         f.seek(0)
         f.write(data)
@@ -243,13 +248,12 @@ if __name__ == "__main__":
     CONFIG = Config()
     CONFIG.readCfg(CFG)
 
-    sys.tracebacklimit=0
-    
-    httpd = SocketServer.TCPServer(("", int(CONFIG.get('port'))), Handler)
+    sys.tracebacklimit=1
 
+    httpd = SocketServer.TCPServer(("", int(CONFIG.get('port'))), Handler)
+    #SO_REUSEADDR
     if(len(sys.argv) > 1):
         PORT = int(sys.argv[1])
 
     print("PROXY RUNNING: %s" % CONFIG.get('port'))
     httpd.serve_forever()
-

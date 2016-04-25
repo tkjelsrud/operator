@@ -3,7 +3,8 @@
 
   <routing match="/xxxx"
      host="xxxx.no"
-     path="/xxxx" />
+     path="/xxxx"
+     secure="True" />
 
   <routing match="/asd"
      host="xxxx.no"
@@ -18,7 +19,13 @@
     <notify  event="response.header" key="Content-Length" match="" />
 
     <delay   event="request" time="5.000" />
-    <replace event="data" key="data" match="0001" replace="0002" />
+    <replace 
+        event="data" // Event in the code (processing of the actual payload)
+        action="query" // SOAPAction must contain this string
+        key="data" // Field to be changed
+        match="0001" // Value to be replaced (search)
+        replace="0002" // New replacement value
+        />
 
     <!-- 50% chance of a 5 second delay when connecting -->
     <delay   event="request.connection" time="5.000" chance="0.5" />
