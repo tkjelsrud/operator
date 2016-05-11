@@ -15,10 +15,18 @@
      path="/xxxx" />
 
   <exec>
-    <notify  event="request.header" key="SOAPAction" match="" />
-    <notify  event="response.header" key="Content-Length" match="" />
+    <!-- Use to log/output values of interest while processing -->
+    <notify event="request.header" key="SOAPAction" match="" />
+    <notify event="response.header" key="Content-Length" match="" />
 
-    <delay   event="request" time="5.000" />
+    <delay  event="request" time="5.000" />
+    
+    <!-- Trigger delay for 60 ms, but only for request with SOAPAction: MySoapAction -->
+    <delay  event="request" action="MySoapAction" time="60" />
+    
+    <!-- Trigger failure (exception which will disrupt communication) on SOAPAction: MySoapFailAction -->
+    <fail   event="request"  action="MySoapFailAction" />
+    
     <replace 
         event="data" // Event in the code (processing of the actual payload)
         action="query" // SOAPAction must contain this string
@@ -28,6 +36,6 @@
         />
 
     <!-- 50% chance of a 5 second delay when connecting -->
-    <delay   event="request.connection" time="5.000" chance="0.5" />
+    <delay event="request.connection" time="5.000" chance="0.5" />
   </exec>
 </proxyconfig>

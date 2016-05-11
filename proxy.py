@@ -1,9 +1,5 @@
 #!/usr/bin/python
-# thomas.kjelsrud@vegvesen.no
-#
-# versjonering
-#
-# unit tester
+# https://github.com/tkjelsrud/proxy
 
 from SimpleHTTPServer import SimpleHTTPRequestHandler
 import SocketServer
