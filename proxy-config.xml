@@ -37,5 +37,20 @@
 
     <!-- 50% chance of a 5 second delay when connecting -->
     <delay event="request.connection" time="5.000" chance="0.5" />
+    
+    
+    <!-- Not implemented / possible new function, pre defined/template answers -->
+    <mock 
+        action="MySoapAction"  // Filter, for this action
+        chance="0.5" // Does not need to happen each time
+        fileName="pathToTemplateMockAnswer.txt" // What format for files? Complete txt of headers and body?
+        callThrough="false"    // Wether or not call should be sent all the way to "back end" (mock will replace the answer)
+        learnFirst="false" // Will allow first call to go through, subsequent calls will all use the "stored" response
+        />
+     
+     <!-- Not implemented, store all transactions, for debugging/statistics purposes -->
+    <storage
+    
+        />
   </exec>
 </proxyconfig>
