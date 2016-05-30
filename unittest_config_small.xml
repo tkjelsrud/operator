@@ -1,0 +1,12 @@
+<proxyconfig>
+  <var key="port" value="8080" />
+
+  <routing match="/xxxx"
+     host="xxxx.no"
+     path="/xxxx"
+     secure="True" />
+
+  <routing match="/asd"
+     host="xxxx.no"
+     path="/xxxx" />
+</proxyconfig>
